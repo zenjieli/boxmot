@@ -1,0 +1,25 @@
+{
+    // Use IntelliSense to learn about possible attributes.
+    // Hover to view descriptions of existing attributes.
+    // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Track video",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "boxmot/engine/cli.py",
+            "console": "integratedTerminal",
+            "args": [
+                "track",
+                "--yolo-model",
+                "yolox_m.pt",
+                "--tracking-method",
+                "bytetrack",
+                "--source",
+                "/home/zli/data/VIRAT/videos/VIRAT_S_000008.mp4",
+                "--show"
+            ]
+        }
+    ]
+}
