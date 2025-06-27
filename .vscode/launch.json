@@ -20,6 +20,33 @@
                 "/home/zli/data/VIRAT/videos/VIRAT_S_000008.mp4",
                 "--show"
             ]
+        },
+        {
+            "name": "Track video 1",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "boxmot/engine/cli.py",
+            "console": "integratedTerminal",
+            "args": [
+                "track",
+                "--yolo-model",
+                "yolov8x.pt",
+                "--tracking-method",
+                "bytetrack",
+                "--source",
+                // "/mnt/dknas/MEVA/videos/2018-03-05/09/2018-03-05.09-50-01.09-55-01.school.G339.r13.avi",
+                // "/mnt/dknas/MEVA/videos/2018-03-05/09/2018-03-05.09-50-33.09-55-00.school.G330.r13.avi",
+                "/mnt/dknas/MEVA/videos/2018-03-15/16/2018-03-15.15-55-07.16-00-07.hospital.G436.r13.avi",
+                // "--save-txt",
+                // "--save",
+                "--classes",
+                "0",
+                "1",
+                "2",
+                "3",
+                "5",
+                "7"
+            ]
         }
     ]
 }
