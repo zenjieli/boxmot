@@ -58,14 +58,14 @@ python boxmot/engine/cli.py track \
 
 ### 🔍 Argument Descriptions
 
-| Flag              | Description |
-|-------------------|-------------|
-| `--yolo-model`     | Path to the YOLO model file (e.g., `yolov8x.pt`) |
-| `--tracking-method`| Method to use for tracking (e.g., `bytetrack`) |
-| `--source`         | Input video file path |
-| `--save-txt`       | Save detection and tracking results as text files in `./runs` |
-| `--save`           | Save annotated video output |
-| `--classes`        | COCO class indices to detect and track |
+| Flag                | Description                                                   |
+| ------------------- | ------------------------------------------------------------- |
+| `--yolo-model`      | Path to the YOLO model file (e.g., `yolov8x.pt`)              |
+| `--tracking-method` | Method to use for tracking (e.g., `bytetrack`)                |
+| `--source`          | Input video file path                                         |
+| `--save-txt`        | Save detection and tracking results as text files in `./runs` |
+| `--save`            | Save annotated video output                                   |
+| `--classes`         | COCO class indices to detect and track                        |
 
 > For supported YOLO models and tracking methods, see the main [README.md](../README.md).
 
@@ -81,7 +81,8 @@ python boxmot/engine/cli.py track \
 
 ## 📄 Output Format
 
-Each frame of the processed video generates a corresponding `.txt` file containing object detections and tracks.
+Each frame of the processed video generates a corresponding `.txt` file containing object detections and tracking information. Frame numbering **starts from one**. When combining these `.txt` files into a single file for a video, we would like to convert the frame IDs to be *zero-based*.
+
 
 ### File Content Format
 
@@ -91,14 +92,14 @@ Each line represents one detected or tracked object in the format:
 object_type_id rel_center_x rel_center_y rel_width rel_height object_id
 ```
 
-| Field             | Description |
-|------------------|-------------|
-| `object_type_id` | Class index (e.g., 0 = person) |
+| Field            | Description                                        |
+| ---------------- | -------------------------------------------------- |
+| `object_type_id` | Class index (e.g., 0 = person)                     |
 | `rel_center_x`   | Normalized x-coordinate of the bounding box center |
 | `rel_center_y`   | Normalized y-coordinate of the bounding box center |
-| `rel_width`      | Normalized width of the bounding box |
-| `rel_height`     | Normalized height of the bounding box |
-| `object_id`      | Unique ID assigned to each tracked object |
+| `rel_width`      | Normalized width of the bounding box               |
+| `rel_height`     | Normalized height of the bounding box              |
+| `object_id`      | Unique ID assigned to each tracked object          |
 
 Those bounding box values are relative to the image dimensions (range: 0–1).
 

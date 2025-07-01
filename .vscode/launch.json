@@ -5,24 +5,14 @@
     "version": "0.2.0",
     "configurations": [
         {
-            "name": "Track video",
+            "name": "Python: Current",
             "type": "debugpy",
             "request": "launch",
-            "program": "boxmot/engine/cli.py",
-            "console": "integratedTerminal",
-            "args": [
-                "track",
-                "--yolo-model",
-                "yolox_m.pt",
-                "--tracking-method",
-                "bytetrack",
-                "--source",
-                "/home/zli/data/VIRAT/videos/VIRAT_S_000008.mp4",
-                "--show"
-            ]
+            "program": "${file}",
+            "console": "integratedTerminal"
         },
         {
-            "name": "Track video 1",
+            "name": "Track video",
             "type": "debugpy",
             "request": "launch",
             "program": "boxmot/engine/cli.py",
@@ -34,19 +24,41 @@
                 "--tracking-method",
                 "bytetrack",
                 "--source",
-                // "/mnt/dknas/MEVA/videos/2018-03-05/09/2018-03-05.09-50-01.09-55-01.school.G339.r13.avi",
-                // "/mnt/dknas/MEVA/videos/2018-03-05/09/2018-03-05.09-50-33.09-55-00.school.G330.r13.avi",
-                "/mnt/dknas/MEVA/videos/2018-03-15/16/2018-03-15.15-55-07.16-00-07.hospital.G436.r13.avi",
-                // "--save-txt",
-                // "--save",
-                "--classes",
-                "0",
-                "1",
-                "2",
-                "3",
-                "5",
-                "7"
+                "/mnt/dknas/MEVA/videos/2018-03-07/09/2018-03-07.09-11-05.09-15-05.school.G424.r13.avi",
+                "--name",
+                "track/VIRAT_S_000200_05_001525_001575",
+                "--show"                
+            ],
+            "justMyCode": false
+        },
+        {
+            "name": "Track videos",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "custom/track_videos.py",
+            "console": "integratedTerminal",
+            "args": [
+                "--video-dir",
+                "/mnt/dknas/MEVA/videos/2018-03-07",
+                "--yolo-model",
+                "yolov8x.pt",
+                "--tracking-method",
+                "bytetrack",
+                "--save-txt"
             ]
-        }
+        },
+        {
+            "name": "Vis tracking",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "custom/vis_tracking.py",
+            "console": "integratedTerminal",
+            "args": [
+                "--video-filepath",
+                "/mnt/dknas/MEVA/videos/2018-03-07/09/2018-03-07.09-11-05.09-15-05.school.G336.r13.avi",
+                "--ann-dir",
+                "data/Milestone_MEVA/track"
+            ]
+        },
     ]
 }
