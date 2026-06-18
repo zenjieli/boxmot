@@ -58,16 +58,11 @@ DEFAULT_YOLO_CLASSES = [0, 1, 2, 3, 5, 7]  # person/bicycle/car/motorcycle/bus/t
 
 
 def _resolve_classes(class_spec, id_map=None):
-    """Resolve class names or IDs to a list of class IDs.
-
-    Args:
-        class_spec: List of class names or ID strings from CLI.
-        id_map: name→ID mapping to use. Defaults to YOLO_CLASSES.
-    """
+    """Resolve class names or IDs to a list of class IDs."""
     if id_map is None:
         id_map = YOLO_CLASSES
     if class_spec is None:
-        return list(id_map.values())[:7]  # first 7 as default
+        return list(id_map.values())[:7]
     ids = []
     for item in class_spec:
         if item.isdigit():
@@ -81,86 +76,132 @@ def _resolve_classes(class_spec, id_map=None):
 
 
 def parse_args():
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--video-dir", type=str, required=True)  # Custom argument
+    parser = argparse.ArgumentParser(description="Track videos using YOLO or RF-DETR + boxmot")
 
-    # Arguments copied from cli.py
-    parser.add_argument("--yolo-model", type=str, required=True)
-    parser.add_argument('--reid-model', type=Path, default=WEIGHTS / 'osnet_x0_25_msmt17.pt', help='path to ReID model weights')
-    parser.add_argument('--imgsz', '--img-size', nargs='+', type=int, default=None, help='inference size h,w')
-    parser.add_argument('--conf', type=float, default=0.01, help='min confidence threshold')
-    parser.add_argument('--iou', type=float, default=0.7, help='IoU threshold for NMS')
-    parser.add_argument('--device', default='', help='cuda device(s), e.g. 0 or 0,1,2,3 or cpu')
-    parser.add_argument('--project', type=Path, default=ROOT / 'runs', help='save results to project/name')
-    parser.add_argument('--exist-ok', action='store_true', default=True, help='existing project/name ok, do not increment')
-    parser.add_argument('--half', action='store_true', help='use FP16 half-precision inference')
-    parser.add_argument('--vid-stride', type=int, default=1, help='video frame-rate stride')
-    parser.add_argument("--tracking-method", type=str, required=True)
-    parser.add_argument('--verbose', action='store_true', help='print detailed logs')
-    parser.add_argument('--agnostic-nms', action='store_true', help='class-agnostic NMS')
-    parser.add_argument('--show-labels', action='store_false', help='hide detection labels')
-    parser.add_argument('--show-conf', action='store_false', help='hide detection confidences')
-    parser.add_argument('--show-trajectories', action='store_true', help='overlay past trajectories')
-    parser.add_argument('--save-txt', action='store_true', help='save results to a .txt file')
-    parser.add_argument('--save-crop', action='store_true', help='save cropped detections')
-    parser.add_argument('--save', action='store_true', help='save annotated video')
-    parser.add_argument('--line-width', type=int, default=None, help='bounding box line width')
-    parser.add_argument('--per-class', action='store_true', help='track each class separately')
-    parser.add_argument('--classes', nargs='+', default=None,
-                        help='COCO class names or IDs to detect '
-                             '(e.g. --classes person backpack handbag suitcase or --classes 0 24 26 28). '
-                             'Default: person bicycle car motorcycle bus truck')
-    parser.add_argument('--save-json', type=str, default=None, metavar='PATH',
-                        help='Path to a JSON file to export tracking results in ArgusAgent format. '
-                             'Results are accumulated across videos in the run.')
+    # Common arguments
+    parser.add_argument("--video-dir", type=str, required=True)
+    parser.add_argument("--detector", type=str, default="yolo", choices=["yolo", "rfdetr"],
+                        help="Detector to use (default: yolo)")
+    parser.add_argument("--tracking-method", type=str, required=True,
+                        help="Tracker: bytetrack, botsort, etc.")
+    parser.add_argument("--conf", type=float, default=0.01,
+                        help="Min confidence threshold (default: 0.01 for yolo, 0.3 for rfdetr)")
+    parser.add_argument("--device", default="", help="cuda device(s), e.g. 0 or cpu")
+    parser.add_argument("--half", action="store_true", help="use FP16 half-precision")
+    parser.add_argument("--project", type=Path, default=ROOT / 'runs',
+                        help="save results to project/name")
+    parser.add_argument("--classes", nargs='+', default=None,
+                        help="COCO class names or IDs (e.g. --classes person backpack handbag suitcase). "
+                             "Uses YOLO IDs for --detector yolo, official COCO IDs for --detector rfdetr.")
+    parser.add_argument("--save-txt", action="store_true", help="save results to .txt files")
+    parser.add_argument("--save-json", type=str, default=None, metavar="PATH",
+                        help="Path to export tracking JSON in ArgusAgent format")
+
+    # YOLO-specific arguments
+    parser.add_argument("--yolo-model", type=str, default=None,
+                        help="YOLO model (required for --detector yolo)")
+    parser.add_argument("--reid-model", type=Path, default=WEIGHTS / 'osnet_x0_25_msmt17.pt',
+                        help="path to ReID model weights")
+    parser.add_argument("--iou", type=float, default=0.7, help="IoU threshold for NMS")
+    parser.add_argument("--vid-stride", type=int, default=1, help="video frame-rate stride")
+    parser.add_argument("--save", action="store_true", help="save annotated video")
+    parser.add_argument("--save-crop", action="store_true", help="save cropped detections")
+
+    # RF-DETR-specific arguments
+    parser.add_argument("--rfdetr-model", type=str, default="RFDETRLarge",
+                        help="RF-DETR model class: RFDETRBase or RFDETRLarge (for --detector rfdetr)")
 
     args = parser.parse_args()
+
+    # Adjust defaults per detector
+    if args.detector == "rfdetr" and args.conf == 0.01:
+        args.conf = 0.3
+    if args.detector == "yolo" and args.yolo_model is None:
+        parser.error("--yolo-model is required for --detector yolo")
+
     return args
 
 
-def convert_args(args: argparse.Namespace, label_dir: str):
-    """
-    Convert the args to what boxmot expects
-    """
-    # Convert Namespace to dict, then copy
-    args_dict = vars(args).copy()
-    args_dict.pop("video_dir")
-    args_dict["classes"] = _resolve_classes(args.classes, YOLO_CLASSES)
-    args_dict["imgsz"] = None
-    args_dict["name"] = label_dir
-    return args_dict
+def _get_class_map(detector: str):
+    """Return the appropriate name→ID and ID→name mappings for the detector."""
+    if detector == "rfdetr":
+        return OFFICIAL_COCO_CLASSES, OFFICIAL_COCO_CLASS_IDS
+    return YOLO_CLASSES, YOLO_CLASS_IDS
 
 
-def track_one_video(video_filepath: str, args_dict: dict):
+def postprocess(video_filepath, video_basename, args, class_ids_map):
+    """Combine per-frame txt files and optionally export JSON."""
+    if not args.save_txt:
+        return
+
+    label_dir = osp.join(args.project, video_basename, "labels")
+    if not osp.isdir(label_dir):
+        return
+
+    out_dir = osp.join(args.project, video_basename)
+    combined_txt = osp.join(out_dir, video_basename + ".txt")
+    combine_text_files(label_dir, out_dir=out_dir, out_name=video_basename)
+    rmdir(label_dir)
+
+    if args.save_json:
+        tracking_txt_to_tracks_json(combined_txt, video_filepath, args.save_json,
+                                   class_ids=class_ids_map)
+
+
+def track_one_video_yolo(video_filepath: str, args_dict: dict):
+    """Track a single video using YOLO via boxmot's yolo.track()."""
     from argparse import Namespace
-    args = Namespace(**args_dict)
-    args.source = video_filepath
+    ns = Namespace(**args_dict)
+    ns.source = video_filepath
+    run_track(ns)
 
-    run_track(args)
+
+def track_one_video_rfdetr(video_filepath: str, model, tracker, args, class_ids):
+    """Track a single video using RF-DETR. Delegates to track_videos_rfdetr."""
+    from custom.track_videos_rfdetr import track_one_video
+    track_one_video(video_filepath, model, tracker, args, class_ids)
 
 
 if __name__ == '__main__':
     from tqdm import tqdm
 
     args = parse_args()
+    _, class_ids_map = _get_class_map(args.detector)
+    name_map, _ = _get_class_map(args.detector)
+
+    # Initialize detector and tracker for RF-DETR
+    if args.detector == "rfdetr":
+        os.environ["QT_QPA_PLATFORM"] = "offscreen"
+        from custom.track_videos_rfdetr import get_tracker
+        from rfdetr import RFDETRBase, RFDETRLarge
+
+        model_classes = {"RFDETRBase": RFDETRBase, "RFDETRLarge": RFDETRLarge}
+        if args.rfdetr_model not in model_classes:
+            raise ValueError(f"Unknown RF-DETR model '{args.rfdetr_model}'. "
+                             f"Choose from: {list(model_classes.keys())}")
+        device = args.device if args.device else "cuda"
+        print(f"Loading RF-DETR model ({args.rfdetr_model}) on {device}...")
+        rfdetr_model = model_classes[args.rfdetr_model](device=device)
+
+        print(f"Initializing tracker ({args.tracking_method})...")
+        tracker = get_tracker(args.tracking_method, device=args.device, half=args.half)
+
+        class_ids = _resolve_classes(args.classes, name_map)
+
     video_filepaths = find_video_files(args.video_dir)
 
-    for video_filepath in tqdm(video_filepaths): 
+    for video_filepath in tqdm(video_filepaths):
         video_basename = osp.splitext(osp.basename(video_filepath))[0]
 
         print(f"Tracking {video_filepath}.")
-        track_one_video(video_filepath, convert_args(args, video_basename))
+        if args.detector == "yolo":
+            args_dict = vars(args).copy()
+            args_dict.pop("video_dir")
+            args_dict["classes"] = _resolve_classes(args.classes, name_map)
+            args_dict["imgsz"] = None
+            args_dict["name"] = video_basename
+            track_one_video_yolo(video_filepath, args_dict)
+        else:
+            track_one_video_rfdetr(video_filepath, rfdetr_model, tracker, args, class_ids)
 
-        if args.save_txt:
-            label_dir = osp.join(args.project, video_basename, "labels")
-            if osp.isdir(label_dir):
-                out_dir = osp.join(args.project, video_basename)
-                combined_txt = osp.join(out_dir, video_basename + ".txt")
-                combine_text_files(label_dir, out_dir=out_dir, out_name=video_basename)
-                rmdir(label_dir)
-
-                if args.save_json:
-                    tracking_txt_to_tracks_json(combined_txt, video_filepath, args.save_json,
-                                               class_ids=YOLO_CLASS_IDS)
-
-        #tracking_txt_to_trajectory_tsv(video_filepath, tracking_txt_filepath=args.project, trajectory_tsv_filepath=args.project)
+        postprocess(video_filepath, video_basename, args, class_ids_map)

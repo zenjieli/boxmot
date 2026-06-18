@@ -58,19 +58,18 @@
             "name": "Track videos (RF-DETR)",
             "type": "debugpy",
             "request": "launch",
-            "program": "custom/track_videos_rfdetr.py",
+            "program": "custom/track_videos.py",
             "console": "integratedTerminal",
             "args": [
                 "--video-dir",
                 "/home/zli/workspace/mine/ArgusAgent/benchmark/videodata/04/tmp",
+                "--detector",
+                "rfdetr",
                 "--tracking-method",
                 "bytetrack",
                 "--save-txt",
                 "--classes",
                 "person",
-                // "backpack",
-                // "handbag",
-                // "suitcase",
                 "--save-json",
                 "runs/tracks_rfdetr.json"
             ]
