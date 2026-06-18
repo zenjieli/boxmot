@@ -50,6 +50,8 @@
                 "backpack",
                 "handbag",
                 "suitcase",
+                "--conf",
+                "0.3",
                 "--save-json",
                 "runs/tracks.json"
             ]
@@ -70,6 +72,8 @@
                 "--save-txt",
                 "--classes",
                 "person",
+                "--conf",
+                "0.5",
                 "--save-json",
                 "runs/tracks_rfdetr.json"
             ]

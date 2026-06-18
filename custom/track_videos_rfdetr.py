@@ -16,6 +16,20 @@ from PIL import Image
 from boxmot.utils import WEIGHTS
 
 
+def _reset_track_id_counter(tracking_method: str):
+    """Reset the class-level track ID counter for the given tracker type.
+
+    Each tracker keeps a class-variable `_count` on its BaseTrack that persists
+    across instances. We reset it here so every new video starts IDs from 1.
+    """
+    if tracking_method == "bytetrack":
+        from boxmot.trackers.bytetrack.basetrack import BaseTrack
+        BaseTrack.clear_count()
+    elif tracking_method == "botsort":
+        from boxmot.trackers.botsort.basetrack import BaseTrack
+        BaseTrack.clear_count()
+
+
 def get_tracker(tracking_method: str, device: str = "", half: bool = False):
     """Instantiate a boxmot tracker by name."""
     from boxmot import ByteTrack, BotSort
@@ -28,13 +42,16 @@ def get_tracker(tracking_method: str, device: str = "", half: bool = False):
 
     if tracking_method == "botsort":
         import torch
-        return trackers[tracking_method](
+        tracker = trackers[tracking_method](
             reid_weights=WEIGHTS / 'osnet_x0_25_msmt17.pt',
             device=torch.device(torch_device),
             half=half,
         )
     else:
-        return trackers[tracking_method]()
+        tracker = trackers[tracking_method]()
+
+    _reset_track_id_counter(tracking_method)
+    return tracker
 
 
 def detect_frame(model, frame, conf_threshold: float, class_ids: list):
@@ -81,12 +98,14 @@ def _save_tracking_txt(frame_dets, frame_idx, video_w, video_h, out_dir, video_b
             f.write(f"{int(cls)} {cx:.6f} {cy:.6f} {w:.6f} {h:.6f} {conf:.4f} {int(track_id)}\n")
 
 
-def track_one_video(video_filepath: str, model, tracker, args, class_ids):
+def track_one_video(video_filepath: str, model, tracking_method: str, args, class_ids):
     """Track a single video using RF-DETR detection + boxmot tracking.
 
     Writes per-frame txt files to args.project/<video_basename>/labels/.
     The caller is responsible for combining and JSON export.
     """
+    tracker = get_tracker(tracking_method, device=args.device, half=args.half)
+
     cap = cv2.VideoCapture(video_filepath)
     if not cap.isOpened():
         print(f"[ERROR] Cannot open {video_filepath}")

@@ -96,6 +96,8 @@ def parse_args():
     parser.add_argument("--save-txt", action="store_true", help="save results to .txt files")
     parser.add_argument("--save-json", type=str, default=None, metavar="PATH",
                         help="Path to export tracking JSON in ArgusAgent format")
+    parser.add_argument("--save-video", action="store_true",
+                        help="Render tracking overlay and save a video for each input")
 
     # YOLO-specific arguments
     parser.add_argument("--yolo-model", type=str, default=None,
@@ -103,9 +105,11 @@ def parse_args():
     parser.add_argument("--reid-model", type=Path, default=WEIGHTS / 'osnet_x0_25_msmt17.pt',
                         help="path to ReID model weights")
     parser.add_argument("--iou", type=float, default=0.7, help="IoU threshold for NMS")
+    parser.add_argument("--agnostic-nms", action="store_true", help="class-agnostic NMS")
     parser.add_argument("--vid-stride", type=int, default=1, help="video frame-rate stride")
     parser.add_argument("--save", action="store_true", help="save annotated video")
     parser.add_argument("--save-crop", action="store_true", help="save cropped detections")
+    parser.add_argument("--verbose", action="store_true", help="print verbose YOLO output")
 
     # RF-DETR-specific arguments
     parser.add_argument("--rfdetr-model", type=str, default="RFDETRLarge",
@@ -118,6 +122,8 @@ def parse_args():
         args.conf = 0.3
     if args.detector == "yolo" and args.yolo_model is None:
         parser.error("--yolo-model is required for --detector yolo")
+    if args.save_video:
+        args.save_txt = True
 
     return args
 
@@ -130,7 +136,7 @@ def _get_class_map(detector: str):
 
 
 def postprocess(video_filepath, video_basename, args, class_ids_map):
-    """Combine per-frame txt files and optionally export JSON."""
+    """Combine per-frame txt files and optionally export JSON or a tracking video."""
     if not args.save_txt:
         return
 
@@ -147,6 +153,65 @@ def postprocess(video_filepath, video_basename, args, class_ids_map):
         tracking_txt_to_tracks_json(combined_txt, video_filepath, args.save_json,
                                    class_ids=class_ids_map)
 
+    if getattr(args, "save_video", False):
+        output_video = osp.join(out_dir, video_basename + "_tracked.mp4")
+        render_tracking_video(video_filepath, combined_txt, output_video)
+
+
+def render_tracking_video(video_path: str, annotation_txt_path: str, output_video_path: str):
+    """Render tracking overlay on a video and save to a new file.
+
+    Args:
+        video_path: Path to the original input video.
+        annotation_txt_path: Path to the combined tracking .txt file
+            (format: ``frame_id class cx cy w h conf track_id``).
+        output_video_path: Destination path for the rendered video (.mp4).
+    """
+    import cv2
+    from custom.vis_tracking import parse_annotations, draw_detections
+
+    if not osp.exists(annotation_txt_path):
+        print(f"[WARNING] Annotation file not found, skipping: {annotation_txt_path}")
+        return
+
+    annotations = parse_annotations(annotation_txt_path)
+
+    cap = cv2.VideoCapture(video_path)
+    if not cap.isOpened():
+        print(f"[ERROR] Cannot open video: {video_path}")
+        return
+
+    img_w = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+    img_h = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+    fps = cap.get(cv2.CAP_PROP_FPS) or 30.0
+    total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+
+    os.makedirs(osp.dirname(output_video_path) or ".", exist_ok=True)
+    fourcc = cv2.VideoWriter_fourcc(*"mp4v")
+    writer = cv2.VideoWriter(output_video_path, fourcc, fps, (img_w, img_h))
+    if not writer.isOpened():
+        print(f"[ERROR] Cannot open VideoWriter for: {output_video_path}")
+        cap.release()
+        return
+
+    print(f"[INFO] Rendering {total_frames} frames → {output_video_path}")
+    frame_idx = 0
+    while True:
+        ret, frame = cap.read()
+        if not ret:
+            break
+        if frame_idx in annotations:
+            frame = draw_detections(frame, annotations[frame_idx], frame_idx, img_w, img_h)
+        else:
+            cv2.putText(frame, f"Frame: {frame_idx}", (10, 30),
+                        cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255), 2)
+        writer.write(frame)
+        frame_idx += 1
+
+    cap.release()
+    writer.release()
+    print(f"[INFO] Saved tracking video: {output_video_path}")
+
 
 def track_one_video_yolo(video_filepath: str, args_dict: dict):
     """Track a single video using YOLO via boxmot's yolo.track()."""
@@ -156,10 +221,10 @@ def track_one_video_yolo(video_filepath: str, args_dict: dict):
     run_track(ns)
 
 
-def track_one_video_rfdetr(video_filepath: str, model, tracker, args, class_ids):
+def track_one_video_rfdetr(video_filepath: str, model, tracking_method: str, args, class_ids):
     """Track a single video using RF-DETR. Delegates to track_videos_rfdetr."""
     from custom.track_videos_rfdetr import track_one_video
-    track_one_video(video_filepath, model, tracker, args, class_ids)
+    track_one_video(video_filepath, model, tracking_method, args, class_ids)
 
 
 if __name__ == '__main__':
@@ -172,7 +237,6 @@ if __name__ == '__main__':
     # Initialize detector and tracker for RF-DETR
     if args.detector == "rfdetr":
         os.environ["QT_QPA_PLATFORM"] = "offscreen"
-        from custom.track_videos_rfdetr import get_tracker
         from rfdetr import RFDETRBase, RFDETRLarge
 
         model_classes = {"RFDETRBase": RFDETRBase, "RFDETRLarge": RFDETRLarge}
@@ -182,9 +246,6 @@ if __name__ == '__main__':
         device = args.device if args.device else "cuda"
         print(f"Loading RF-DETR model ({args.rfdetr_model}) on {device}...")
         rfdetr_model = model_classes[args.rfdetr_model](device=device)
-
-        print(f"Initializing tracker ({args.tracking_method})...")
-        tracker = get_tracker(args.tracking_method, device=args.device, half=args.half)
 
         class_ids = _resolve_classes(args.classes, name_map)
 
@@ -200,8 +261,14 @@ if __name__ == '__main__':
             args_dict["classes"] = _resolve_classes(args.classes, name_map)
             args_dict["imgsz"] = None
             args_dict["name"] = video_basename
+            args_dict["show_conf"] = False
+            args_dict["show_labels"] = True
+            args_dict["exist_ok"] = True
+            args_dict["line_width"] = None
+            args_dict["per_class"] = False
+            args_dict["show_trajectories"] = False
             track_one_video_yolo(video_filepath, args_dict)
         else:
-            track_one_video_rfdetr(video_filepath, rfdetr_model, tracker, args, class_ids)
+            track_one_video_rfdetr(video_filepath, rfdetr_model, args.tracking_method, args, class_ids)
 
         postprocess(video_filepath, video_basename, args, class_ids_map)
