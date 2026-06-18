@@ -39,12 +39,40 @@
             "console": "integratedTerminal",
             "args": [
                 "--video-dir",
-                "/mnt/dknas/MEVA/videos/2018-03-07",
+                "/home/zli/workspace/mine/ArgusAgent/benchmark/videodata/04/tmp",
                 "--yolo-model",
                 "yolov8x.pt",
                 "--tracking-method",
                 "bytetrack",
-                "--save-txt"
+                "--save-txt",
+                "--classes",
+                "person",
+                "backpack",
+                "handbag",
+                "suitcase",
+                "--save-json",
+                "runs/tracks.json"
+            ]
+        },
+        {
+            "name": "Track videos (RF-DETR)",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "custom/track_videos_rfdetr.py",
+            "console": "integratedTerminal",
+            "args": [
+                "--video-dir",
+                "/home/zli/workspace/mine/ArgusAgent/benchmark/videodata/04/tmp",
+                "--tracking-method",
+                "bytetrack",
+                "--save-txt",
+                "--classes",
+                "person",
+                // "backpack",
+                // "handbag",
+                // "suitcase",
+                "--save-json",
+                "runs/tracks_rfdetr.json"
             ]
         },
         {
@@ -55,9 +83,9 @@
             "console": "integratedTerminal",
             "args": [
                 "--video-filepath",
-                "/mnt/dknas/MEVA/videos/2018-03-07/09/2018-03-07.09-11-05.09-15-05.school.G336.r13.avi",
+                "/home/zli/workspace/mine/ArgusAgent/benchmark/videodata/04/tmp/4_3_19_5550_5820.mp4",
                 "--ann-dir",
-                "data/Milestone_MEVA/track"
+                "runs/4_3_19_5550_5820"
             ]
         },
     ]

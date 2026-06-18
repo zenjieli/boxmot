@@ -150,6 +150,8 @@ test = [
 
 yolo = ["ultralytics"]
 
+rfdetr = ["rfdetr"]
+
 evolve = [
   "ray<3.0.0,>=2.35.0",
   "ray[tune]<3.0.0,>=2.35.0",

@@ -82,6 +82,7 @@ def main(args):
         device=args.device,
         show_conf=args.show_conf,
         save_txt=args.save_txt,
+        save_conf=args.save_txt,
         show_labels=args.show_labels,
         save=args.save,
         verbose=args.verbose,

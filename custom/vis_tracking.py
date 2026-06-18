@@ -3,15 +3,10 @@ import os.path as osp
 import cv2
 import numpy as np
 
-# Class mapping
-CLASS_NAMES = {
-    0: "person",
-    1: "bicycle",
-    2: "car",
-    3: "motorcycle",
-    5: "bus",
-    7: "truck"
-}
+from custom.track_videos import YOLO_CLASS_IDS, OFFICIAL_COCO_CLASS_IDS
+
+# Class mapping (ID → name). Supports both YOLO (0-indexed) and official COCO (1-indexed) IDs.
+CLASS_NAMES = {**YOLO_CLASS_IDS, **OFFICIAL_COCO_CLASS_IDS}
 
 COLORS = [(0, 255, 0), (255, 0, 0), (0, 0, 255), (255, 255, 0), (255, 0, 255), (0, 255, 255)]
 
@@ -20,12 +15,13 @@ def parse_annotations(annotation_path):
     """
     Parses annotation file into a dictionary of frame_id -> list of detections.
     Each detection is a dictionary containing all fields.
+    Supports both 7-field (without confidence) and 8-field (with confidence) formats.
     """
     annotations = {}
     with open(annotation_path, 'r') as f:
         for line in f:
             parts = line.strip().split()
-            if len(parts) != 7:
+            if len(parts) not in (7, 8):
                 continue
             frame_id = int(parts[0])
             obj_type = int(parts[1])
@@ -33,7 +29,12 @@ def parse_annotations(annotation_path):
             rel_center_y = float(parts[3])
             rel_width = float(parts[4])
             rel_height = float(parts[5])
-            obj_id = int(parts[6])
+            if len(parts) == 8:
+                confidence = float(parts[6])
+                obj_id = int(parts[7])
+            else:
+                confidence = None
+                obj_id = int(parts[6])
 
             detection = {
                 "obj_type": obj_type,
@@ -41,7 +42,8 @@ def parse_annotations(annotation_path):
                 "rel_center_y": rel_center_y,
                 "rel_width": rel_width,
                 "rel_height": rel_height,
-                "obj_id": obj_id
+                "obj_id": obj_id,
+                "confidence": confidence,
             }
 
             if frame_id not in annotations:
@@ -83,7 +85,8 @@ def draw_detections(frame, detections, frame_idx, img_w, img_h):
         cv2.rectangle(frame, (x1, y1), (x2, y2), color, 2)
 
         # Draw label
-        label = f"{class_name} ID:{obj_id}"
+        conf_str = f" {det['confidence']:.2f}" if det.get("confidence") is not None else ""
+        label = f"{class_name} ID:{obj_id}{conf_str}"
         font_scale = 0.5
         thickness = 1
         (text_width, text_height), _ = cv2.getTextSize(label, cv2.FONT_HERSHEY_SIMPLEX, font_scale, thickness)
@@ -135,7 +138,7 @@ def main(video_path, annotation_dir):
 
         # Show or save frame
         cv2.imshow("Tracking Visualization", frame)
-        key = cv2.waitKey(1) & 0xFF
+        key = cv2.waitKey(100) & 0xFF
         if key == 27 or key == ord('q'):
             break
 
