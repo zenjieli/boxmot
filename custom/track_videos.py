@@ -94,8 +94,8 @@ def parse_args():
                         help="COCO class names or IDs (e.g. --classes person backpack handbag suitcase). "
                              "Uses YOLO IDs for --detector yolo, official COCO IDs for --detector rfdetr.")
     parser.add_argument("--save-txt", action="store_true", help="save results to .txt files")
-    parser.add_argument("--save-json", type=str, default=None, metavar="PATH",
-                        help="Path to export tracking JSON in ArgusAgent format")
+    parser.add_argument("--save-json", type=str, default=None, metavar="DIR",
+                        help="Directory to save per-video tracking JSON files in ArgusAgent format")
     parser.add_argument("--save-video", action="store_true",
                         help="Render tracking overlay and save a video for each input")
 
@@ -150,8 +150,9 @@ def postprocess(video_filepath, video_basename, args, class_ids_map):
     rmdir(label_dir)
 
     if args.save_json:
-        tracking_txt_to_tracks_json(combined_txt, video_filepath, args.save_json,
-                                   class_ids=class_ids_map)
+        out_json = osp.join(args.save_json, video_basename + ".json")
+        tracking_txt_to_tracks_json(combined_txt, video_filepath, out_json,
+                                    class_ids=class_ids_map)
 
     if getattr(args, "save_video", False):
         output_video = osp.join(out_dir, video_basename + "_tracked.mp4")

@@ -32,16 +32,17 @@ def tracking_txt_to_tracks_json(tracking_txt_filepath: str, video_path: str, out
     TXT format (without confidence):
         frame_id class cx cy w h track_id
 
-    JSON output format:
-        { "<video_key>": [{ "activity_id": None, "start_frame": ..., "end_frame": ...,
+    JSON output format (per-video file, list):
+        [{ "start_frame": ..., "end_frame": ...,
            "original_start_frame": ..., "original_end_frame": ...,
-           "activity_present": None,
-           "tracks": { "<track_id>": { "class_name": ..., "class_id": ...,
-              "frames": { "<frame>": { "bbox": [x1,y1,x2,y2], "confidence": ... } } } } }] }
+           "tracks": { "<track_id>": { "class_name": ...,
+              "frames": { "<frame>": { "bbox": [x1,y1,x2,y2], "confidence": ... } } } } }]
 
     Coordinates in txt are normalized (cx,cy,w,h); bbox in JSON is absolute [x1,y1,x2,y2].
 
     Args:
+        out_json_path: Path to the output JSON file (one file per video).
+        video_key: Unused; kept for backward compatibility.
         class_ids: ID→name mapping for class labels. Defaults to OFFICIAL_COCO_CLASS_IDS.
     """
     if class_ids is None:
@@ -90,7 +91,6 @@ def tracking_txt_to_tracks_json(tracking_txt_filepath: str, video_path: str, out
             if track_id not in tracks:
                 tracks[track_id] = {
                     "class_name": class_ids.get(class_id, str(class_id)),
-                    "class_id": class_id,
                     "frames": {},
                 }
             tracks[track_id]["frames"][str(frame_id)] = frame_det
@@ -103,29 +103,29 @@ def tracking_txt_to_tracks_json(tracking_txt_filepath: str, video_path: str, out
     min_frame = min(frame_set)
     max_frame = max(frame_set)
 
-    if video_key is None:
-        video_key = osp.basename(video_path)
+    # Extract original_start_frame / original_end_frame from video filename.
+    # Expected suffix: ..._{start}_{end}.ext  e.g. 4_3_01_1259_1650.mp4
+    import re
+    basename = osp.splitext(osp.basename(video_path))[0]
+    m = re.search(r'_(\d+)_(\d+)$', basename)
+    if m:
+        original_start_frame = int(m.group(1))
+        original_end_frame = int(m.group(2))
+    else:
+        original_start_frame = min_frame
+        original_end_frame = max_frame
 
     clip = {
-        "activity_id": None,
         "start_frame": min_frame,
         "end_frame": max_frame,
-        "original_start_frame": min_frame,
-        "original_end_frame": max_frame,
-        "activity_present": None,
+        "original_start_frame": original_start_frame,
+        "original_end_frame": original_end_frame,
         "tracks": {str(tid): t for tid, t in tracks.items()},
     }
 
-    # Load existing JSON if it exists, otherwise start fresh
-    existing_data = {}
-    if osp.exists(out_json_path):
-        with open(out_json_path, 'r') as f:
-            existing_data = json.load(f)
-
-    existing_data[video_key] = [clip]
-
+    os.makedirs(osp.dirname(out_json_path) or ".", exist_ok=True)
     with open(out_json_path, 'w') as f:
-        json.dump(existing_data, f, indent=2)
+        json.dump([clip], f, indent=2)
 
     print(f"[INFO] Tracks JSON saved to {out_json_path}")
     print(f"       {len(tracks)} tracks, {len(frame_set)} frames, "
