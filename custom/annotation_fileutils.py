@@ -21,16 +21,38 @@ def rmdir(dir_path: str):
     os.rmdir(dir_path)
 
 
+def parse_tracking_line(line: str):
+    """Parse a combined tracking line: ``frame_id class cx cy w h [conf] [track_id]``.
+
+    Returns (frame_id, class_id, cx, cy, w, h, conf, track_id); conf or track_id is None when
+    absent, and None is returned for malformed lines. With 7 fields the last one is the track ID
+    if it is a bare integer, otherwise the confidence (Ultralytics writes conf with a decimal point).
+    """
+    parts = line.split()
+    if len(parts) not in (7, 8):
+        return None
+    try:
+        frame_id, class_id = int(parts[0]), int(parts[1])
+        cx, cy, w, h = (float(p) for p in parts[2:6])
+        if len(parts) == 8:
+            return frame_id, class_id, cx, cy, w, h, float(parts[6]), int(parts[7])
+        try:
+            return frame_id, class_id, cx, cy, w, h, None, int(parts[6])
+        except ValueError:
+            return frame_id, class_id, cx, cy, w, h, float(parts[6]), None
+    except ValueError:
+        return None
+
+
 def tracking_txt_to_tracks_json(tracking_txt_filepath: str, video_path: str, out_json_path: str,
                                video_key: str = None, class_ids: dict = None):
     """
     Convert a combined tracking .txt file (from combine_text_files) into the
     ArgusAgent tracks JSON format used by query_object_tracking.
 
-    TXT format (with confidence):
-        frame_id class cx cy w h track_id confidence
-    TXT format (without confidence):
-        frame_id class cx cy w h track_id
+    TXT format (see parse_tracking_line):
+        frame_id class cx cy w h [confidence] [track_id]
+    Lines without a track ID are skipped.
 
     JSON output format (per-video file, list):
         [{ "start_frame": ..., "end_frame": ...,
@@ -63,20 +85,10 @@ def tracking_txt_to_tracks_json(tracking_txt_filepath: str, video_path: str, out
     frame_set = set()
     with open(tracking_txt_filepath, 'r') as f:
         for line in f:
-            parts = line.strip().split()
-            has_conf = len(parts) == 8
-            if not has_conf and len(parts) != 7:
+            parsed = parse_tracking_line(line)
+            if parsed is None or parsed[7] is None:
                 continue
-
-            frame_id = int(parts[0])
-            class_id = int(parts[1])
-            cx, cy, w, h = float(parts[2]), float(parts[3]), float(parts[4]), float(parts[5])
-            if has_conf:
-                confidence = float(parts[6])
-                track_id = int(parts[7])
-            else:
-                confidence = None
-                track_id = int(parts[6])
+            frame_id, class_id, cx, cy, w, h, confidence, track_id = parsed
 
             # Convert normalized (cx, cy, w, h) to absolute (x1, y1, x2, y2)
             x1 = cx * video_width - (w * video_width) / 2
@@ -200,14 +212,10 @@ def tracking_txt_to_trajectory_tsv(video_path: str, tracking_txt_filepath: str, 
 
     with open(tracking_txt_filepath, 'r') as f:
         for line in f:
-            parts = line.strip().split()
-            if len(parts) != 7:
+            parsed = parse_tracking_line(line)
+            if parsed is None or parsed[7] is None:
                 continue
-            frame_id = int(parts[0])
-            object_type_id = int(parts[1])
-            rel_center_x = float(parts[2])
-            rel_center_y = float(parts[3])            
-            object_id = int(parts[6])
+            frame_id, object_type_id, rel_center_x, rel_center_y, _, _, _, object_id = parsed
 
             # Convert normalized coordinates to absolute
             abs_center_x = rel_center_x * video_width

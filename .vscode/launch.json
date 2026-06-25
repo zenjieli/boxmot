@@ -39,21 +39,18 @@
             "console": "integratedTerminal",
             "args": [
                 "--video-dir",
-                "/home/zli/workspace/mine/ArgusAgent/benchmark/videodata/04/tmp",
+                "/home/zli/workspace/mine/ArgusAgent/benchmark/videodata/tmp",
                 "--yolo-model",
                 "yolov8x.pt",
                 "--tracking-method",
                 "bytetrack",
-                "--save-txt",
                 "--classes",
                 "person",
                 "backpack",
                 "handbag",
                 "suitcase",
                 "--conf",
-                "0.3",
-                "--save-json",
-                "runs/tracks.json"
+                "0.3"
             ]
         },
         {
@@ -64,18 +61,16 @@
             "console": "integratedTerminal",
             "args": [
                 "--video-dir",
-                "/home/zli/workspace/mine/ArgusAgent/benchmark/videodata/04/tmp",
+                "/home/zli/Downloads/tmp1",
                 "--detector",
                 "rfdetr",
                 "--tracking-method",
                 "bytetrack",
-                "--save-txt",
                 "--classes",
-                "person",
+                "car",
                 "--conf",
-                "0.5",
-                "--save-json",
-                "runs/tracks_rfdetr.json"
+                "0.25",
+                "--save-video"
             ]
         },
         {
