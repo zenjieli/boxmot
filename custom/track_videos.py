@@ -93,11 +93,10 @@ def parse_args():
     parser.add_argument("--classes", nargs='+', default=None,
                         help="COCO class names or IDs (e.g. --classes person backpack handbag suitcase). "
                              "Uses YOLO IDs for --detector yolo, official COCO IDs for --detector rfdetr.")
-    parser.add_argument("--save-txt", action="store_true", help="save results to .txt files")
-    parser.add_argument("--save-json", type=str, default=None, metavar="DIR",
-                        help="Directory to save per-video tracking JSON files in ArgusAgent format")
     parser.add_argument("--save-video", action="store_true",
                         help="Render tracking overlay and save a video for each input")
+    parser.add_argument("--per-class", action="store_true", default=True,
+                        help="Track each class independently (default: True)")
 
     # YOLO-specific arguments
     parser.add_argument("--yolo-model", type=str, default=None,
@@ -122,8 +121,6 @@ def parse_args():
         args.conf = 0.3
     if args.detector == "yolo" and args.yolo_model is None:
         parser.error("--yolo-model is required for --detector yolo")
-    if args.save_video:
-        args.save_txt = True
 
     return args
 
@@ -135,28 +132,28 @@ def _get_class_map(detector: str):
     return YOLO_CLASSES, YOLO_CLASS_IDS
 
 
-def postprocess(video_filepath, video_basename, args, class_ids_map):
-    """Combine per-frame txt files and optionally export JSON or a tracking video."""
-    if not args.save_txt:
-        return
-
-    label_dir = osp.join(args.project, video_basename, "labels")
+def postprocess(video_filepath, video_basename, args, class_ids_map, output_dir):
+    """Combine per-frame txt files, write JSON, optionally render overlay video, then clean up."""
+    label_dir = osp.join(output_dir, video_basename, "labels")
     if not osp.isdir(label_dir):
+        print(f"[WARNING] Labels dir not found, skipping postprocess: {label_dir}")
         return
 
-    out_dir = osp.join(args.project, video_basename)
-    combined_txt = osp.join(out_dir, video_basename + ".txt")
-    combine_text_files(label_dir, out_dir=out_dir, out_name=video_basename)
+    tmp_dir = osp.join(output_dir, video_basename)
+    combined_txt = osp.join(tmp_dir, video_basename + ".txt")
+    combine_text_files(label_dir, out_dir=tmp_dir, out_name=video_basename)
     rmdir(label_dir)
 
-    if args.save_json:
-        out_json = osp.join(args.save_json, video_basename + ".json")
-        tracking_txt_to_tracks_json(combined_txt, video_filepath, out_json,
-                                    class_ids=class_ids_map)
-
     if getattr(args, "save_video", False):
-        output_video = osp.join(out_dir, video_basename + "_tracked.mp4")
+        output_video = osp.join(output_dir, video_basename + "_tracked.mp4")
         render_tracking_video(video_filepath, combined_txt, output_video)
+
+    out_json = osp.join(output_dir, video_basename + ".json")
+    tracking_txt_to_tracks_json(combined_txt, video_filepath, out_json,
+                                class_ids=class_ids_map)
+
+    os.remove(combined_txt)
+    os.rmdir(tmp_dir)
 
 
 def render_tracking_video(video_path: str, annotation_txt_path: str, output_video_path: str):
@@ -188,8 +185,11 @@ def render_tracking_video(video_path: str, annotation_txt_path: str, output_vide
     total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
 
     os.makedirs(osp.dirname(output_video_path) or ".", exist_ok=True)
-    fourcc = cv2.VideoWriter_fourcc(*"mp4v")
-    writer = cv2.VideoWriter(output_video_path, fourcc, fps, (img_w, img_h))
+    for fourcc_tag in ("avc1", "mp4v"):
+        fourcc = cv2.VideoWriter_fourcc(*fourcc_tag)
+        writer = cv2.VideoWriter(output_video_path, fourcc, fps, (img_w, img_h))
+        if writer.isOpened():
+            break
     if not writer.isOpened():
         print(f"[ERROR] Cannot open VideoWriter for: {output_video_path}")
         cap.release()
@@ -222,10 +222,11 @@ def track_one_video_yolo(video_filepath: str, args_dict: dict):
     run_track(ns)
 
 
-def track_one_video_rfdetr(video_filepath: str, model, tracking_method: str, args, class_ids):
+def track_one_video_rfdetr(video_filepath: str, model, tracking_method: str, args, class_ids,
+                           output_dir: str):
     """Track a single video using RF-DETR. Delegates to track_videos_rfdetr."""
     from custom.track_videos_rfdetr import track_one_video
-    track_one_video(video_filepath, model, tracking_method, args, class_ids)
+    track_one_video(video_filepath, model, tracking_method, args, class_ids, output_dir)
 
 
 if __name__ == '__main__':
@@ -234,6 +235,8 @@ if __name__ == '__main__':
     args = parse_args()
     _, class_ids_map = _get_class_map(args.detector)
     name_map, _ = _get_class_map(args.detector)
+
+    output_dir = str(Path(args.project) / Path(args.video_dir).name)
 
     # Initialize detector and tracker for RF-DETR
     if args.detector == "rfdetr":
@@ -270,6 +273,6 @@ if __name__ == '__main__':
             args_dict["show_trajectories"] = False
             track_one_video_yolo(video_filepath, args_dict)
         else:
-            track_one_video_rfdetr(video_filepath, rfdetr_model, args.tracking_method, args, class_ids)
-
-        postprocess(video_filepath, video_basename, args, class_ids_map)
+            track_one_video_rfdetr(video_filepath, rfdetr_model, args.tracking_method, args,
+                                   class_ids, output_dir)
+            postprocess(video_filepath, video_basename, args, class_ids_map, output_dir)

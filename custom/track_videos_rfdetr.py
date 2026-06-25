@@ -30,7 +30,8 @@ def _reset_track_id_counter(tracking_method: str):
         BaseTrack.clear_count()
 
 
-def get_tracker(tracking_method: str, device: str = "", half: bool = False):
+def get_tracker(tracking_method: str, device: str = "", half: bool = False,
+                per_class: bool = True):
     """Instantiate a boxmot tracker by name."""
     from boxmot import ByteTrack, BotSort
 
@@ -46,9 +47,10 @@ def get_tracker(tracking_method: str, device: str = "", half: bool = False):
             reid_weights=WEIGHTS / 'osnet_x0_25_msmt17.pt',
             device=torch.device(torch_device),
             half=half,
+            per_class=per_class,
         )
     else:
-        tracker = trackers[tracking_method]()
+        tracker = trackers[tracking_method](per_class=per_class)
 
     _reset_track_id_counter(tracking_method)
     return tracker
@@ -98,13 +100,15 @@ def _save_tracking_txt(frame_dets, frame_idx, video_w, video_h, out_dir, video_b
             f.write(f"{int(cls)} {cx:.6f} {cy:.6f} {w:.6f} {h:.6f} {conf:.4f} {int(track_id)}\n")
 
 
-def track_one_video(video_filepath: str, model, tracking_method: str, args, class_ids):
+def track_one_video(video_filepath: str, model, tracking_method: str, args, class_ids,
+                    output_dir: str):
     """Track a single video using RF-DETR detection + boxmot tracking.
 
-    Writes per-frame txt files to args.project/<video_basename>/labels/.
-    The caller is responsible for combining and JSON export.
+    Writes per-frame txt files to <output_dir>/<video_basename>/labels/.
+    The caller is responsible for combining, JSON export, and cleanup.
     """
-    tracker = get_tracker(tracking_method, device=args.device, half=args.half)
+    tracker = get_tracker(tracking_method, device=args.device, half=args.half,
+                          per_class=args.per_class)
 
     cap = cv2.VideoCapture(video_filepath)
     if not cap.isOpened():
@@ -115,7 +119,7 @@ def track_one_video(video_filepath: str, model, tracking_method: str, args, clas
     video_h = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
 
     video_basename = osp.splitext(osp.basename(video_filepath))[0]
-    label_dir = osp.join(args.project, video_basename, "labels")
+    label_dir = osp.join(output_dir, video_basename, "labels")
     os.makedirs(label_dir, exist_ok=True)
 
     frame_idx = 0
@@ -131,9 +135,7 @@ def track_one_video(video_filepath: str, model, tracking_method: str, args, clas
         #        output: (M, 8) [x1,y1,x2,y2,id,conf,cls,ind]
         tracks = tracker.update(dets, frame)
 
-        # Save per-frame txt
-        if args.save_txt:
-            _save_tracking_txt(tracks, frame_idx, video_w, video_h, label_dir, video_basename)
+        _save_tracking_txt(tracks, frame_idx, video_w, video_h, label_dir, video_basename)
 
         frame_idx += 1
 
