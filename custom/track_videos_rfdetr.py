@@ -122,6 +122,10 @@ def track_one_video(video_filepath: str, model, tracking_method: str, args, clas
     label_dir = osp.join(output_dir, video_basename, "labels")
     os.makedirs(label_dir, exist_ok=True)
 
+    import time
+    t_detect = 0.0
+    t_track = 0.0
+
     frame_idx = 0
     while True:
         ret, frame = cap.read()
@@ -129,16 +133,27 @@ def track_one_video(video_filepath: str, model, tracking_method: str, args, clas
             break
 
         # Detect
+        t0 = time.perf_counter()
         dets = detect_frame(model, frame, args.conf, class_ids)
+        t_detect += time.perf_counter() - t0
 
         # Track — input: (N, 6) [x1,y1,x2,y2,conf,cls]
         #        output: (M, 8) [x1,y1,x2,y2,id,conf,cls,ind]
+        t0 = time.perf_counter()
         tracks = tracker.update(dets, frame)
+        t_track += time.perf_counter() - t0
 
         _save_tracking_txt(tracks, frame_idx, video_w, video_h, label_dir, video_basename)
 
         frame_idx += 1
 
     cap.release()
+    if frame_idx > 0:
+        total = t_detect + t_track
+        print(
+            f"[TIMING] {video_basename}: {frame_idx} frames | "
+            f"detect {t_detect:.2f}s ({t_detect/frame_idx*1000:.1f}ms/frame, {t_detect/total*100:.0f}%) | "
+            f"track {t_track:.2f}s ({t_track/frame_idx*1000:.1f}ms/frame, {t_track/total*100:.0f}%)"
+        )
     print(f"[INFO] Tracked {video_basename}: {frame_idx} frames, {len(class_ids)} class filter")
     return frame_idx
