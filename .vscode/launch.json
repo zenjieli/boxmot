@@ -69,13 +69,11 @@
                 "rfdetr",
                 "--tracking-method",
                 "bytetrack",
-                "--save-txt",
                 "--classes",
                 "person",
                 "--conf",
-                "0.5",
-                "--save-json",
-                "runs/tracks_rfdetr.json"
+                "0.25",
+                "--save-video"
             ]
         },
         {
